@@ -156,6 +156,16 @@ class TradingEngine:
             "Подписка на OKX tickers установлена для: "
             + ", ".join(self.sc.all_symbols),
         )
+
+        # Bootstrap: fetch prices via REST (WS may be slow for low-volume pairs like BONK)
+        rest_prices = self.okx.fetch_ticker_prices(self.sc.all_symbols)
+        for sym, price in rest_prices.items():
+            self.sc.update_price(sym, price)
+        if rest_prices and not self.sc.has_reference():
+            if self.sc.has_all_quotes():
+                self.sc.fix_reference_prices()
+                self._log_event("info", "Базовые цены загружены через REST")
+
         self._update_db_state("running")
 
         try:

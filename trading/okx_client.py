@@ -12,6 +12,7 @@ import time
 from typing import Callable
 
 import okx.Account as OkxAccount
+import okx.MarketData as OkxMarket
 import okx.Trade as OkxTrade
 import okx.PublicData as OkxPublic
 from okx.websocket.WsPublicAsync import WsPublicAsync
@@ -33,6 +34,7 @@ class OKXClient:
         self.account = OkxAccount.AccountAPI(api_key, secret_key, passphrase, False, flag)
         self.trade = OkxTrade.TradeAPI(api_key, secret_key, passphrase, False, flag)
         self.public = OkxPublic.PublicAPI("", "", "", False, flag)
+        self.market = OkxMarket.MarketAPI(flag=flag)
 
         self._demo = demo
         self._ws: WsPublicAsync | None = None
@@ -171,6 +173,24 @@ class OKXClient:
                 continue
             raise RuntimeError(f"OKX API error: code={code}, msg={r.get('msg', '')}")
         raise RuntimeError("Max retries exceeded for OKX request")
+
+    # ------------------------------------------------------------------
+    # REST ticker (bootstrap when WS is slow for low-volume pairs)
+    # ------------------------------------------------------------------
+
+    def fetch_ticker_prices(self, symbols: list[str]) -> dict[str, float]:
+        """Fetch current prices via REST for given symbols."""
+        result: dict[str, float] = {}
+        for inst_id in symbols:
+            try:
+                r = self.market.get_ticker(instId=inst_id)
+                if r.get("code") == "0" and r.get("data"):
+                    last = r["data"][0].get("last") or r["data"][0].get("lastPx")
+                    if last:
+                        result[inst_id] = float(last)
+            except Exception as e:
+                log.warning("Failed to fetch ticker %s: %s", inst_id, e)
+        return result
 
     # ------------------------------------------------------------------
     # WebSocket (tickers)
