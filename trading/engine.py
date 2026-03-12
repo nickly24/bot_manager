@@ -125,8 +125,12 @@ class TradingEngine:
         rp = st.get("reference_prices")
         if rp:
             prices = json.loads(rp) if isinstance(rp, str) else rp
-            self.sc.reference_prices = prices
-            log.info("Restored reference prices from DB")
+            # Restore only if symbols match (user didn't change pairs)
+            if all(s in prices for s in self.sc.all_symbols):
+                self.sc.reference_prices = {s: prices[s] for s in self.sc.all_symbols}
+                log.info("Restored reference prices from DB")
+            else:
+                log.info("Reference prices ignored: pairs changed, waiting for fresh quotes")
 
         if st.get("position_open"):
             self.pm.restore(st)

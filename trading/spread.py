@@ -59,7 +59,8 @@ class SpreadCalculator:
         return all(s in self.current_prices for s in self.all_symbols)
 
     def has_reference(self) -> bool:
-        return len(self.reference_prices) == len(self.all_symbols)
+        """True only if we have reference prices for ALL current symbols."""
+        return all(s in self.reference_prices for s in self.all_symbols)
 
     # ------------------------------------------------------------------
     # Spread calculation
