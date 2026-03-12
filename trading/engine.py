@@ -42,6 +42,7 @@ class TradingEngine:
         self._close_requested = False
         self._last_state_update = 0.0
         self._last_spread_log = 0.0
+        self._last_instrument_log = 0.0
         self._tick_count = 0
         self._config: dict = {}
         self._rest_api_ok = True
@@ -269,6 +270,10 @@ class TradingEngine:
                 self._write_spread_log()
                 self._last_spread_log = now
 
+            if now - self._last_instrument_log >= 30.0:
+                self._write_chart_instrument_points()
+                self._last_instrument_log = now
+
         except Exception as exc:
             log.exception("Error in tick handler")
             try:
@@ -365,6 +370,26 @@ class TradingEngine:
         self.db.execute(Q.INSERT_SPREAD_LOG, (
             self.user_id, round(spread, 4), round(r1, 4), round(r2, 4),
         ))
+        try:
+            ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            self.db.execute(Q.INSERT_CHART_SPREAD, (
+                self.user_id, ts, round(spread, 4), round(r1, 4), round(r2, 4),
+            ))
+        except Exception as e:
+            log.debug("chart_spread_points insert skipped: %s", e)
+
+    def _write_chart_instrument_points(self) -> None:
+        if not self.sc.has_reference():
+            return
+        try:
+            ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            for inst_id, price in self.sc.quotes_snapshot().items():
+                if price > 0:
+                    self.db.execute(Q.INSERT_CHART_INSTRUMENT, (
+                        self.user_id, ts, inst_id, round(float(price), 8),
+                    ))
+        except Exception as e:
+            log.debug("chart_instrument_points insert skipped: %s", e)
 
     def _record_trade(self, reason: str, exit_spread: float, pnl: dict) -> None:
         st = self.pm.state

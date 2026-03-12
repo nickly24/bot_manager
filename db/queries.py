@@ -131,6 +131,18 @@ INSERT_SPREAD_LOG = """
 """
 
 # ---------------------------------------------------------------------------
+# chart_spread_points, chart_instrument_points
+# ---------------------------------------------------------------------------
+INSERT_CHART_SPREAD = """
+    INSERT INTO chart_spread_points (user_id, ts, spread_pct, r_basket1_pct, r_basket2_pct)
+    VALUES (%s, %s, %s, %s, %s)
+"""
+INSERT_CHART_INSTRUMENT = """
+    INSERT INTO chart_instrument_points (user_id, ts, inst_id, price)
+    VALUES (%s, %s, %s, %s)
+"""
+
+# ---------------------------------------------------------------------------
 # events_log
 # ---------------------------------------------------------------------------
 INSERT_EVENT = """
