@@ -15,8 +15,9 @@ class Config:
     DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
 
     # --- Manager Server ---
-    MANAGER_HOST = os.getenv("MANAGER_HOST", "127.0.0.1")
-    MANAGER_PORT = int(os.getenv("MANAGER_PORT", "6800"))
+    # В контейнере нужен 0.0.0.0, иначе приложение недоступно снаружи
+    MANAGER_HOST = os.getenv("MANAGER_HOST", "0.0.0.0")
+    MANAGER_PORT = int(os.getenv("PORT") or os.getenv("MANAGER_PORT", "6800"))
     MANAGER_SECRET = os.getenv("MANAGER_SECRET", "change-me-in-production")
 
     # --- Encryption ---

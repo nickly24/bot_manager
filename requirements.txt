@@ -1,4 +1,5 @@
 flask
+gunicorn
 pymysql
 dbutils
 cryptography

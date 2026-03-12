@@ -59,6 +59,11 @@ def _err(message: str, code: int = 400):
 # Endpoints
 # -----------------------------------------------------------------------
 
+@app.get("/")
+def index():
+    return _ok({"service": "PairTrading Bot Manager", "health": "/api/health"})
+
+
 @app.get("/api/health")
 def health():
     return _ok({
@@ -170,12 +175,14 @@ def shutdown_manager():
 
 def create_app() -> Flask:
     global mgr
-    mgr = BotManager()
-
-    recovered = mgr.recover()
-    log.info("Recovery complete: %d bots restored", len(recovered))
-
-    mgr.start_background()
+    try:
+        mgr = BotManager()
+        recovered = mgr.recover()
+        log.info("Recovery complete: %d bots restored", len(recovered))
+        mgr.start_background()
+    except Exception as exc:
+        log.exception("Failed to start BotManager: %s", exc)
+        raise
 
     def handle_sigterm(signum, frame):
         log.info("SIGTERM received — shutting down")
