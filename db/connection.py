@@ -7,7 +7,7 @@ from typing import Any
 import pymysql
 from dbutils.pooled_db import PooledDB
 
-from bot_manager.config import Config
+from config import Config
 
 _pool: PooledDB | None = None
 

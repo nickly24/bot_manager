@@ -18,13 +18,13 @@ import logging
 import time
 from datetime import datetime
 
-from bot_manager.config import Config
-from bot_manager.crypto.encryption import decrypt
-from bot_manager.db.connection import Database
-from bot_manager.db import queries as Q
-from bot_manager.trading.okx_client import OKXClient
-from bot_manager.trading.spread import SpreadCalculator, BasketPair
-from bot_manager.trading.position import PositionManager
+from config import Config
+from crypto.encryption import decrypt
+from db.connection import Database
+from db import queries as Q
+from trading.okx_client import OKXClient
+from trading.spread import SpreadCalculator, BasketPair
+from trading.position import PositionManager
 
 log = logging.getLogger("engine")
 

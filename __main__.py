@@ -1,6 +1,6 @@
 """Allow running as `python -m bot_manager` to start the server."""
 
-from bot_manager.server import create_app, Config
+from server import create_app, Config
 
 if __name__ == "__main__":
     app = create_app()

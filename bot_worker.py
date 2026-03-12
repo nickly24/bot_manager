@@ -39,7 +39,7 @@ def main() -> None:
     user_id = args.user_id
     log.info("Starting worker for user_id=%s", user_id)
 
-    from bot_manager.trading.engine import TradingEngine
+    from trading.engine import TradingEngine
 
     engine = TradingEngine(user_id)
 

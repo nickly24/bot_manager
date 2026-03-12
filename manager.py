@@ -20,10 +20,10 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from bot_manager.config import Config
-from bot_manager.db.connection import Database
-from bot_manager.db import queries as Q
-from bot_manager.models import WorkerInfo
+from config import Config
+from db.connection import Database
+from db import queries as Q
+from models import WorkerInfo
 
 log = logging.getLogger("manager")
 

@@ -13,8 +13,8 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from bot_manager.trading.okx_client import OKXClient
-from bot_manager.trading.spread import SpreadCalculator
+from trading.okx_client import OKXClient
+from trading.spread import SpreadCalculator
 
 log = logging.getLogger("position")
 

@@ -11,8 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bot_manager.db.connection import Database
-from bot_manager.crypto.encryption import encrypt
+from db.connection import Database
+from crypto.encryption import encrypt
 
 db = Database()
 

@@ -20,8 +20,8 @@ from datetime import datetime
 
 from flask import Flask, jsonify, request
 
-from bot_manager.config import Config
-from bot_manager.manager import BotManager
+from config import Config
+from manager import BotManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -141,8 +141,8 @@ def close_positions(user_id: int):
 @app.get("/api/logs/<int:user_id>")
 @require_auth
 def get_logs(user_id: int):
-    from bot_manager.db.connection import Database
-    from bot_manager.db import queries as Q
+    from db.connection import Database
+    from db import queries as Q
 
     limit = request.args.get("limit", 50, type=int)
     db = Database()

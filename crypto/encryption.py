@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from cryptography.fernet import Fernet
 
-from bot_manager.config import Config
+from config import Config
 
 _fernet: Fernet | None = None
 

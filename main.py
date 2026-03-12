@@ -3,8 +3,8 @@
 - gunicorn main:app
 - python main.py
 """
-from bot_manager.app import app
-from bot_manager.config import Config
+from app import app
+from config import Config
 
 __all__ = ["app"]
 
