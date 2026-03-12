@@ -1,0 +1,8 @@
+flask
+pymysql
+dbutils
+cryptography
+python-okx
+python-dotenv
+click
+requests

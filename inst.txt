@@ -1,0 +1,115 @@
+HOME-USDT-SWAP  ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
+BTC-USDT-SWAP   ctVal=    0.01 tickSz=     0.1 lotSz=    0.01 state=live
+DOGE-USDT-SWAP  ctVal=    1000 tickSz= 0.00005 lotSz=    0.01 state=live
+SOL-USDT-SWAP   ctVal=       1 tickSz=    0.01 lotSz=    0.01 state=live
+XRP-USDT-SWAP   ctVal=     100 tickSz=  0.0001 lotSz=    0.01 state=live
+BCH-USDT-SWAP   ctVal=     0.1 tickSz=     0.1 lotSz=    0.01 state=live
+ETH-USDT-SWAP   ctVal=     0.1 tickSz=    0.01 lotSz=    0.01 state=live
+RESOLV-USDT-SWAP ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+1INCH-USDT-SWAP ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+2Z-USDT-SWAP    ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+A-USDT-SWAP     ctVal=     100 tickSz=  0.0001 lotSz=       1 state=live
+AAVE-USDT-SWAP  ctVal=     0.1 tickSz=    0.01 lotSz=     0.1 state=live
+ACT-USDT-SWAP   ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+ADA-USDT-SWAP   ctVal=     100 tickSz=  0.0002 lotSz=     0.1 state=live
+AI16Z-USDT-SWAP ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+AKITA-USDT-SWAP ctVal= 3000000 tickSz=0.0000000001 lotSz=       1 state=live
+ALGO-USDT-SWAP  ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+ARB-USDT-SWAP   ctVal=      10 tickSz=  0.0001 lotSz=     0.1 state=live
+ASP-USDT-SWAP   ctVal=     100 tickSz=  0.0001 lotSz=       1 state=live
+ASTER-USDT-SWAP ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+ATOM-USDT-SWAP  ctVal=       1 tickSz=   0.001 lotSz=       1 state=live
+AUCTION-USDT-SWAP ctVal=     0.1 tickSz=   0.001 lotSz=     0.1 state=live
+AVAX-USDT-SWAP  ctVal=       1 tickSz=   0.001 lotSz=     0.1 state=live
+AXS-USDT-SWAP   ctVal=     0.1 tickSz=  0.0001 lotSz=       1 state=live
+BAND-USDT-SWAP  ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+BIO-USDT-SWAP   ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
+BLUAI-USDT-SWAP ctVal=    1000 tickSz=0.000001 lotSz=       1 state=live
+BNB-USDT-SWAP   ctVal=    0.01 tickSz=     0.1 lotSz=       1 state=live
+BOME-USDT-SWAP  ctVal=    1000 tickSz=0.000001 lotSz=       1 state=live
+BRETT-USDT-SWAP ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+BREV-USDT-SWAP  ctVal=     0.1 tickSz=  0.0001 lotSz=       1 state=live
+CATI-USDT-SWAP  ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+CAT-USDT-SWAP   ctVal=  100000 tickSz=0.000000001 lotSz=       1 state=live
+CELO-USDT-SWAP  ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+CFX-USDT-SWAP   ctVal=      10 tickSz= 0.00001 lotSz=     0.1 state=live
+CHZ-USDT-SWAP   ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+COMP-USDT-SWAP  ctVal=     0.1 tickSz=    0.01 lotSz=     0.1 state=live
+CRO-USDT-SWAP   ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+CRV-USDT-SWAP   ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+DOT-USDT-SWAP   ctVal=       1 tickSz=   0.001 lotSz=     0.1 state=live
+ENA-USDT-SWAP   ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+ETC-USDT-SWAP   ctVal=      10 tickSz=    0.01 lotSz=    0.01 state=live
+ETHW-USDT-SWAP  ctVal=     0.1 tickSz=  0.0001 lotSz=       1 state=live
+ETHFI-USDT-SWAP ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+FIL-USDT-SWAP   ctVal=     0.1 tickSz=   0.001 lotSz=       1 state=live
+FLOKI-USDT-SWAP ctVal=  100000 tickSz=0.00000001 lotSz=       1 state=live
+EOS-USDT-SWAP   ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+GMT-USDT-SWAP   ctVal=       1 tickSz= 0.00001 lotSz=       1 state=live
+H-USDT-SWAP     ctVal=      10 tickSz=  0.0001 lotSz=     0.1 state=live
+HBAR-USDT-SWAP  ctVal=     100 tickSz=  0.0001 lotSz=     0.1 state=live
+HMSTR-USDT-SWAP ctVal=     100 tickSz=0.000001 lotSz=       1 state=live
+ICP-USDT-SWAP   ctVal=    0.01 tickSz=   0.001 lotSz=     0.1 state=live
+IMX-USDT-SWAP   ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+INJ-USDT-SWAP   ctVal=     0.1 tickSz=   0.001 lotSz=       1 state=live
+IOTA-USDT-SWAP  ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+JUP-USDT-SWAP   ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+KAITO-USDT-SWAP ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+KSM-USDT-SWAP   ctVal=     0.1 tickSz=   0.001 lotSz=       1 state=live
+LDO-USDT-SWAP   ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+LINK-USDT-SWAP  ctVal=       1 tickSz=   0.001 lotSz=    0.01 state=live
+LINEA-USDT-SWAP ctVal=     100 tickSz=0.000001 lotSz=       1 state=live
+LPT-USDT-SWAP   ctVal=     0.1 tickSz=   0.001 lotSz=       1 state=live
+LQTY-USDT-SWAP  ctVal=       1 tickSz=  0.0001 lotSz=     0.1 state=live
+LRC-USDT-SWAP   ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+LTC-USDT-SWAP   ctVal=       1 tickSz=    0.01 lotSz=     0.1 state=live
+MAGIC-USDT-SWAP ctVal=       1 tickSz= 0.00001 lotSz=       1 state=live
+MAJOR-USDT-SWAP ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+MASK-USDT-SWAP  ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+MET-USDT-SWAP   ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+MINA-USDT-SWAP  ctVal=       1 tickSz= 0.00001 lotSz=       1 state=live
+MUBARAK-USDT-SWAP ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
+NEAR-USDT-SWAP  ctVal=      10 tickSz=  0.0001 lotSz=     0.1 state=live
+NEO-USDT-SWAP   ctVal=       1 tickSz=   0.001 lotSz=       1 state=live
+NOT-USDT-SWAP   ctVal=     100 tickSz=0.0000001 lotSz=       1 state=live
+OP-USDT-SWAP    ctVal=       1 tickSz= 0.00001 lotSz=       1 state=live
+PEPE-USDT-SWAP  ctVal=10000000 tickSz=0.000000001 lotSz=     0.1 state=live
+QTUM-USDT-SWAP  ctVal=       1 tickSz=   0.001 lotSz=       1 state=live
+SAND-USDT-SWAP  ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+SCR-USDT-SWAP   ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
+SHIB-USDT-SWAP  ctVal= 1000000 tickSz=0.00000001 lotSz=     0.1 state=live
+SKY-USDT-SWAP   ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
+SOLV-USDT-SWAP  ctVal=       1 tickSz=0.000001 lotSz=       1 state=live
+SPK-USDT-SWAP   ctVal=       1 tickSz= 0.00001 lotSz=       1 state=live
+STRK-USDT-SWAP  ctVal=    0.01 tickSz=    0.01 lotSz=       1 state=live
+SUI-USDT-SWAP   ctVal=       1 tickSz= 0.00001 lotSz=       1 state=live
+SUSHI-USDT-SWAP ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+SYRUP-USDT-SWAP ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+TEST3103-USDT-SWAP ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+TEST3110-USDT-SWAP ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+THETA-USDT-SWAP ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+TON-USDT-SWAP   ctVal=       1 tickSz=   0.001 lotSz=       1 state=live
+TRIA-USDT-SWAP  ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
+TRX-USDT-SWAP   ctVal=    1000 tickSz=  0.0001 lotSz=    0.01 state=live
+TSLA-USDT-SWAP  ctVal=    0.01 tickSz=    0.01 lotSz=       1 state=live
+USDC-USDT-SWAP  ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+MKR-USDT-SWAP   ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+XAU-USDT-SWAP   ctVal=   0.001 tickSz=     0.1 lotSz=       1 state=live
+XLM-USDT-SWAP   ctVal=     100 tickSz= 0.00001 lotSz=    0.01 state=live
+XPL-USDT-SWAP   ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+XSR-USDT-SWAP   ctVal=  0.5879 tickSz=  0.0001 lotSz=       1 state=live
+XTZ-USDT-SWAP   ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+YB-USDT-SWAP    ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+YFI-USDT-SWAP   ctVal=  0.0001 tickSz=     0.1 lotSz=       1 state=live
+YGG-USDT-SWAP   ctVal=       1 tickSz=  0.0001 lotSz=       1 state=live
+ZAMA-USDT-SWAP  ctVal=      10 tickSz= 0.00001 lotSz=       1 state=live
+ZBCN-USDT-SWAP  ctVal=    1000 tickSz=0.0000001 lotSz=       1 state=live
+ZETA-USDT-SWAP  ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
+ZIL-USDT-SWAP   ctVal=     100 tickSz=0.000001 lotSz=       1 state=live
+LIT-USDT-SWAP   ctVal=      10 tickSz=   0.001 lotSz=       1 state=live
+RAVE-USDT-SWAP  ctVal=  4.7619 tickSz= 0.00001 lotSz=       1 state=live
+XAG-USDT-SWAP   ctVal=    0.01 tickSz=    0.01 lotSz=       1 state=live
+TEST1234-USDT-SWAP ctVal=      10 tickSz=  0.0001 lotSz=       1 state=live
+PIGGY-USDT-SWAP ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
+COAI-USDT-SWAP  ctVal=    1000 tickSz=  0.0001 lotSz=       1 state=live
+ROBO-USDT-SWAP  ctVal=     100 tickSz= 0.00001 lotSz=       1 state=live
