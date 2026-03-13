@@ -154,10 +154,14 @@ class PositionManager:
         # #endregion
 
         if pnl >= tp:
-            return self._close_position("take_profit", pnl, spread)
+            snapshot = self.state.to_dict()
+            self._close_position("take_profit", pnl, spread)
+            return ("take_profit", snapshot)
 
         if self.stop_loss_enabled and pnl <= -self.stop_loss_pct:
-            return self._close_position("stop_loss", pnl, spread)
+            snapshot = self.state.to_dict()
+            self._close_position("stop_loss", pnl, spread)
+            return ("stop_loss", snapshot)
 
         dca_threshold = self.entry_threshold + (self.state.dca_count + 1) * self.dca_step
         if abs_spread >= dca_threshold and self.state.dca_count < self.dca_max:
@@ -383,36 +387,50 @@ class PositionManager:
             return
 
         results = self.okx.place_batch_orders(orders)
-        failed = []
-        for r in results:
+        failed_orders = []
+        for i, r in enumerate(results):
             s_code = r.get("sCode", "0")
             if s_code != "0":
-                failed.append(f"{r.get('sMsg', '')} (instId={r.get('instId', '?')}, sCode={s_code})")
+                failed_orders.append((orders[i], r.get("sMsg", ""), s_code, r.get("instId", "?")))
+                log.error("Close failed instId=%s sCode=%s %s", r.get("instId"), s_code, r.get("sMsg", ""))
             else:
                 log.info("Close order OK: instId=%s ordId=%s", r.get("instId", "?"), r.get("ordId", "?"))
-        if failed:
-            log.error("Some close orders failed: %s", "; ".join(failed))
 
-        log.info("Batch close: %d orders sent, %d failed", len(results), len(failed))
+        if failed_orders:
+            log.warning("Retrying %d failed close orders one-by-one", len(failed_orders))
+            for order, msg, code, inst_id in failed_orders:
+                try:
+                    time.sleep(0.6)
+                    rr = self.okx.place_batch_orders([order])
+                    if rr and rr[0].get("sCode") == "0":
+                        log.info("Retry close OK: %s", inst_id)
+                    else:
+                        log.error("Retry close failed %s: %s", inst_id, msg)
+                except Exception as e:
+                    log.exception("Retry close exception %s: %s", inst_id, e)
+
+        log.info("Batch close: %d orders sent, %d failed", len(results), len(failed_orders))
 
         time.sleep(2)
         remaining = self.okx.get_positions()
         still_open = [p for p in remaining if p["instId"] in our_symbols and float(p.get("pos", 0)) != 0]
         if still_open:
             syms = [p["instId"] for p in still_open]
-            log.warning("Positions still open after close attempt: %s — retrying", syms)
-            retry_orders = []
+            log.warning("Positions still open after close attempt: %s — retrying one-by-one", syms)
             for pos in still_open:
                 qty = float(pos["pos"])
+                sz = max(1, abs(int(round(qty))))
                 side = "sell" if qty > 0 else "buy"
-                retry_orders.append({
-                    "instId": pos["instId"], "tdMode": "cross",
-                    "side": side, "ordType": "market",
-                    "sz": str(abs(int(float(pos["pos"])))),
-                    "reduceOnly": True,
-                })
-            retry_results = self.okx.place_batch_orders(retry_orders)
-            log.info("Retry close: %d orders sent", len(retry_results))
+                ro = {"instId": pos["instId"], "tdMode": "cross", "side": side, "ordType": "market", "sz": str(sz), "reduceOnly": True}
+                try:
+                    time.sleep(0.6)
+                    rr = self.okx.place_batch_orders([ro])
+                    if rr and rr[0].get("sCode") == "0":
+                        log.info("Retry close OK: %s", pos["instId"])
+                    else:
+                        log.error("Retry close failed %s: %s", pos["instId"], rr[0].get("sMsg", "") if rr else "no response")
+                except Exception as e:
+                    log.exception("Retry close exception %s: %s", pos["instId"], e)
             time.sleep(2)
             final = self.okx.get_positions()
             still_open_final = [p for p in final if p["instId"] in our_symbols and float(p.get("pos", 0)) != 0]

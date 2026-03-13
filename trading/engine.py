@@ -296,12 +296,17 @@ class TradingEngine:
             except Exception:
                 pass
 
-    def _handle_action(self, action: str) -> None:
+    def _handle_action(self, action: str | tuple[str, dict]) -> None:
+        if isinstance(action, tuple):
+            action, snapshot = action
+        else:
+            snapshot = None
+
         spread = self.sc.spread()
         pnl = self.pm.get_pnl_breakdown()
 
         if action in ("take_profit", "stop_loss"):
-            self._record_trade(action, spread, pnl)
+            self._record_trade(action, spread, pnl, snapshot)
             self._log_event("trade", f"Позиция закрыта ({action}): PnL={pnl['pnl_total_pct']:.4f}%")
             self.db.execute(
                 Q.INSERT_NOTIFICATION,
@@ -406,9 +411,9 @@ class TradingEngine:
         except Exception as e:
             log.debug("chart_instrument_points insert skipped: %s", e)
 
-    def _record_trade(self, reason: str, exit_spread: float, pnl: dict) -> None:
-        st = self.pm.state
-        self._record_trade_from_snapshot(reason, exit_spread, pnl, st.to_dict())
+    def _record_trade(self, reason: str, exit_spread: float, pnl: dict, snapshot: dict | None = None) -> None:
+        snap = snapshot if snapshot is not None else self.pm.state.to_dict()
+        self._record_trade_from_snapshot(reason, exit_spread, pnl, snap)
 
     def _record_trade_from_snapshot(
         self, reason: str, exit_spread: float, pnl: dict, snapshot: dict
