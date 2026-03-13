@@ -43,6 +43,7 @@ class TradingEngine:
         self._last_state_update = 0.0
         self._last_spread_log = 0.0
         self._last_instrument_log = 0.0
+        self._last_position_sync = 0.0
         self._tick_count = 0
         self._config: dict = {}
         self._rest_api_ok = True
@@ -272,6 +273,14 @@ class TradingEngine:
 
             self.pm.entry_cooldown = time.time() < self._entry_blocked_until
 
+            now = time.time()
+            if self.pm.state.is_open and now - self._last_position_sync >= 3.0:
+                try:
+                    self.pm.sync_with_exchange()
+                    self._last_position_sync = now
+                except Exception as e:
+                    log.warning("Position sync failed: %s", e)
+
             action = self.pm.evaluate()
             if action:
                 self._handle_action(action)
@@ -333,7 +342,7 @@ class TradingEngine:
     # ------------------------------------------------------------------
 
     def _update_db_state(self, actual_state: str) -> None:
-        pnl = self.pm.get_pnl_breakdown() if self.pm else {}
+        pnl = self.pm.get_pnl_for_dashboard() if self.pm else {}
         balance = {}
         ping = 0
 
@@ -364,7 +373,7 @@ class TradingEngine:
             pnl.get("pnl_long_pct"),
             pnl.get("pnl_short_pct"),
             pnl.get("pnl_total_pct"),
-            None,  # pnl_total_usdt — TODO: calculate
+            pnl.get("pnl_total_usdt"),
             balance.get("total_eq"),
             balance.get("avail_eq"),
             ping,

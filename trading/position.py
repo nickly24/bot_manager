@@ -143,16 +143,6 @@ class PositionManager:
         pnl = self._unrealised_pnl()
         tp = self.take_profit_pct
 
-        # #region agent log
-        if pnl >= tp:
-            try:
-                import json
-                with open("/Users/nickly/Desktop/robot/.cursor/debug-7b318a.log", "a") as f:
-                    f.write(json.dumps({"sessionId":"7b318a","hypothesisId":"B","location":"position.py:evaluate","message":"tp_fires","data":{"pnl":pnl,"take_profit_pct":tp,"entry_spread":self.state.entry_spread,"spread":spread,"long_basket":self.state.long_basket},"timestamp":int(__import__("time").time()*1000)}) + "\n")
-            except Exception:
-                pass
-        # #endregion
-
         if pnl >= tp:
             snapshot = self.state.to_dict()
             self._close_position("take_profit", pnl, spread)
@@ -170,21 +160,51 @@ class PositionManager:
         return None
 
     # ------------------------------------------------------------------
-    # Unrealised P&L (basket-level, based on spread movement)
+    # Unrealised P&L — приоритет: реальный upl с биржи, fallback: spread
     # ------------------------------------------------------------------
 
+    def _unrealised_pnl_from_exchange(self) -> float | None:
+        """
+        Реальный unrealized PnL в % из суммы upl по позициям.
+        Returns None если нет данных (позиции не синхронизированы).
+        """
+        if not self.state.positions:
+            return None
+        total_upl = sum(float(p.get("upl", 0)) for p in self.state.positions.values())
+        exposure = 0.0
+        for inst_id, pos in self.state.positions.items():
+            try:
+                qty = float(pos.get("qty", 0))
+                avg_px = float(pos.get("avg_price", 0))
+                ct_val = self.okx.get_ct_val(inst_id)
+                exposure += qty * ct_val * avg_px
+            except (ValueError, KeyError):
+                continue
+        if exposure <= 0:
+            return None
+        return 100.0 * total_upl / exposure
+
     def _unrealised_pnl(self) -> float:
+        """TP/SL: реальный upl с биржи (приоритет), иначе spread-based fallback."""
         if not self.state.is_open:
             return 0.0
 
-        current_spread = self.sc.spread()
+        real = self._unrealised_pnl_from_exchange()
+        if real is not None:
+            return real
 
-        if self.state.long_basket == "basket2":
-            return self.state.entry_spread - current_spread
-        else:
-            return current_spread - self.state.entry_spread
+        current_spread = self.sc.spread()
+        spread_pnl = (
+            self.state.entry_spread - current_spread
+            if self.state.long_basket == "basket2"
+            else current_spread - self.state.entry_spread
+        )
+        if abs(spread_pnl) > 0.1:
+            log.debug("Using spread-based PnL (%.4f%%), no upl data yet", spread_pnl)
+        return spread_pnl
 
     def get_pnl_breakdown(self) -> dict:
+        """Spread-based PnL (fallback, не учитывает slippage/комиссии)."""
         r_b1 = self.sc.basket_return("basket1")
         r_b2 = self.sc.basket_return("basket2")
 
@@ -199,6 +219,50 @@ class PositionManager:
             "pnl_long_pct": round(pnl_long, 4),
             "pnl_short_pct": round(pnl_short, 4),
             "pnl_total_pct": round(pnl_long + pnl_short, 4),
+            "pnl_total_usdt": None,
+        }
+
+    def get_pnl_for_dashboard(self) -> dict:
+        """
+        Реальный PnL с биржи (upl) для отображения в админке.
+        При открытой позиции: upl из positions. Иначе — spread-based.
+        """
+        fallback = self.get_pnl_breakdown()
+        if not self.state.is_open or not self.state.positions:
+            return fallback
+
+        total_upl = sum(float(p.get("upl", 0)) for p in self.state.positions.values())
+        exposure = 0.0
+        for inst_id, pos in self.state.positions.items():
+            try:
+                qty = float(pos.get("qty", 0))
+                avg_px = float(pos.get("avg_price", 0))
+                ct_val = self.okx.get_ct_val(inst_id)
+                exposure += qty * ct_val * avg_px
+            except (ValueError, KeyError):
+                continue
+        if exposure <= 0:
+            return fallback
+
+        pnl_total_pct = 100.0 * total_upl / exposure
+        long_syms = set(
+            self.sc.symbols_b2 if self.state.long_basket == "basket2" else self.sc.symbols_b1
+        )
+        upl_long = sum(
+            float(p.get("upl", 0))
+            for inst, p in self.state.positions.items()
+            if inst in long_syms
+        )
+        upl_short = total_upl - upl_long
+        half_exp = exposure / 2.0
+        pnl_long_pct = 100.0 * upl_long / half_exp if half_exp else 0
+        pnl_short_pct = 100.0 * upl_short / half_exp if half_exp else 0
+
+        return {
+            "pnl_long_pct": round(pnl_long_pct, 4),
+            "pnl_short_pct": round(pnl_short_pct, 4),
+            "pnl_total_pct": round(pnl_total_pct, 4),
+            "pnl_total_usdt": round(total_upl, 2),
         }
 
     # ------------------------------------------------------------------
