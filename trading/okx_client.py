@@ -154,9 +154,32 @@ class OKXClient:
         results = []
         for i in range(0, len(orders), 20):
             batch = orders[i:i + 20]
-            r = self._safe_request(self.trade.place_multiple_orders, batch)
+            r = self._safe_request_batch(self.trade.place_multiple_orders, batch)
             results.extend(r.get("data", []))
         return results
+
+    def _safe_request_batch(self, fn, batch: list) -> dict:
+        """Like _safe_request but accepts code=2 (Bulk operation partially successful)."""
+        for attempt in range(3):
+            r = fn(batch)
+            code = r.get("code", "-1")
+            if code in ("0", "2"):
+                return r
+            if code in ("50011", "50013"):
+                time.sleep(2 * (attempt + 1))
+                continue
+            # code=1: include sCode from data for debugging (e.g. 51020=insufficient margin)
+            data = r.get("data", [])
+            scodes = []
+            if data:
+                for i, item in enumerate(data):
+                    sc = item.get("sCode", "")
+                    smsg = item.get("sMsg", "")
+                    inst = item.get("instId") or (batch[i].get("instId", "?") if i < len(batch) else "?")
+                    scodes.append(f"{inst}:sCode={sc} {smsg}".strip())
+            ext = f" data=[{'; '.join(scodes[:5])}{'...' if len(scodes) > 5 else ''}]" if scodes else ""
+            raise RuntimeError(f"OKX API error: code={code}, msg={r.get('msg', '')}{ext}")
+        raise RuntimeError("Max retries exceeded for OKX batch request")
 
     def _safe_order(self, fn, **kwargs) -> dict:
         for attempt in range(3):

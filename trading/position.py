@@ -280,9 +280,8 @@ class PositionManager:
             try:
                 self._execute_entry(long_basket, short_basket)
             except Exception:
-                log.exception(
-                    "Failed to execute entry orders — position tracked logically"
-                )
+                log.exception("Failed to execute entry orders — position not opened")
+                raise
 
         self.state.is_open = True
         self.state.long_basket = long_basket
@@ -304,6 +303,8 @@ class PositionManager:
                 self._execute_entry(self.state.long_basket, self.state.short_basket)
             except Exception:
                 log.exception("Failed to execute DCA orders")
+                self.state.dca_count -= 1
+                raise
         return "dca"
 
     def _close_position(self, reason: str, pnl: float, spread: float) -> str:
@@ -363,24 +364,18 @@ class PositionManager:
             avail, self.position_size_pct, len(self.sc.pairs), per_pair_usdt, required,
         )
 
-        # Получаем ВСЕ цены (до 60 попыток = ~90 сек)
-        for attempt in range(60):
-            missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
-            if not missing:
-                break
-            log.info("Price fetch attempt %d/60: missing %s", attempt + 1, missing)
+        missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
+        if missing:
             fetched = self.okx.fetch_ticker_prices(missing)
             for sym, px in fetched.items():
                 if px > 0:
                     self.sc.current_prices[sym] = px
-                    log.info("REST price for %s: %.4f", sym, px)
-            time.sleep(1.5)
-        still_missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
-        if still_missing:
-            log.error("Entry ABORT: no prices for %s after 60 attempts", still_missing)
-            if self.log_event:
-                self.log_event("error", f"Entry aborted: no prices for {still_missing}", {"missing": still_missing})
-            return
+            still_missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
+            if still_missing:
+                log.error("Entry ABORT: no prices for %s", still_missing)
+                if self.log_event:
+                    self.log_event("error", f"Entry aborted: no prices for {still_missing}", {"missing": still_missing})
+                return
 
         orders = []
         long_symbols = self.sc.symbols_b1 if long_basket == "basket1" else self.sc.symbols_b2
@@ -434,14 +429,13 @@ class PositionManager:
             if s_code != "0":
                 failed.append((o, r.get("sMsg", ""), s_code))
 
-        # Ретрай проваленных — до 30 попыток (rate limit OKX)
-        max_retries = 30
+        max_retries = 5
         for retry_round in range(max_retries):
             if not failed:
                 break
-            delay = min(2.0 + retry_round * 0.5, 15.0)
-            log.warning("Batch entry: %d failed, retry %d/%d in %.1fs", len(failed), retry_round + 1, max_retries, delay)
-            time.sleep(delay)
+            if retry_round > 0:
+                time.sleep(0.3)
+            log.warning("Batch entry: %d failed, retry %d/%d", len(failed), retry_round + 1, max_retries)
             still_failed = []
             for order, msg, code in failed:
                 try:
@@ -462,17 +456,39 @@ class PositionManager:
         log.info("Batch entry: %d OK, %d failed (after retries)", ok_count, len(failed))
 
         if self.log_event:
+            failed_detail = [(o.get("instId"), str(c), m) for o, m, c in failed]
             details = {
                 "total": len(orders),
                 "ok": ok_count,
                 "failed": len(failed),
                 "failed_symbols": [o.get("instId") for o, _, _ in failed],
-                "failed_codes": [(o.get("instId"), c, m) for o, m, c in failed],
+                "failed_codes": failed_detail,
             }
+            s_codes = [c for _, c, _ in failed_detail if c not in ("exception", "no_result")]
+            if s_codes:
+                details["okx_scodes"] = list(dict.fromkeys(s_codes))
             self.log_event(
                 "trade" if len(failed) == 0 else "warning",
                 f"Batch entry: {ok_count}/{len(orders)} OK" + (f", {len(failed)} failed" if failed else ""),
                 details,
+            )
+
+        if failed:
+            log.warning("Entry ABORT: partial position rejected — rolling back %d opened positions", ok_count)
+            if self.log_event:
+                self.log_event(
+                    "warning",
+                    f"Вход отменён: {len(failed)} ордеров не прошли. Откат {ok_count} открытых позиций.",
+                    {"rollback_count": ok_count, "failed_symbols": [o.get("instId") for o, _, _ in failed]},
+                )
+            try:
+                self._execute_close()
+            except Exception as e:
+                log.exception("Rollback failed — partial positions may remain open: %s", e)
+                if self.log_event:
+                    self.log_event("error", f"Откат не удался: {e}. Проверьте позиции на бирже вручную.", {})
+            raise RuntimeError(
+                f"Entry aborted: {len(failed)}/8 orders failed. Rolled back. Failed: {[o.get('instId') for o, _, _ in failed]}"
             )
 
         self._update_positions_from_exchange()

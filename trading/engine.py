@@ -303,6 +303,9 @@ class TradingEngine:
 
         except Exception as exc:
             log.exception("Error in tick handler")
+            if "Entry aborted" in str(exc) or "Rolled back" in str(exc).lower():
+                self._entry_blocked_until = time.time() + 30
+                log.info("Entry blocked for 30s after failed/partial entry")
             try:
                 self._log_event("error", f"Ошибка в обработчике тика: {exc}")
             except Exception:
