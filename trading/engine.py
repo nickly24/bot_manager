@@ -429,6 +429,16 @@ class TradingEngine:
         long_b = snapshot.get("long_basket") or "basket1"
         actual_pnl = (exit_spread - entry_spread) if long_b == "basket1" else (entry_spread - exit_spread)
 
+        pnl_usdt_val = 0.0
+        try:
+            balance = self.okx.get_balance()
+            total_eq = float(balance.get("total_eq") or 0)
+            size_pct = float(self._config.get("position_size_pct", 100))
+            exposure = total_eq * (size_pct / 100.0)
+            pnl_usdt_val = round(exposure * (actual_pnl / 100.0), 2)
+        except Exception:
+            pass
+
         # #region agent log
         try:
             import json
@@ -448,7 +458,7 @@ class TradingEngine:
             long_b,
             snapshot.get("short_basket") or "basket2",
             round(actual_pnl, 4),
-            0,
+            pnl_usdt_val,
             0,
             snapshot.get("dca_count", 0),
             reason,
