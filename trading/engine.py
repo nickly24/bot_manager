@@ -73,7 +73,10 @@ class TradingEngine:
         )
 
         self.sc = SpreadCalculator(pairs)
-        self.pm = PositionManager(self.okx, self.sc, self._config)
+        self.pm = PositionManager(
+            self.okx, self.sc, self._config,
+            log_event_cb=lambda lvl, msg, d=None: self._log_event(lvl, msg, d),
+        )
 
         self.okx.set_position_mode_net()
         lever = int(self._config.get("leverage", 20))
@@ -359,6 +362,15 @@ class TradingEngine:
                 self._rest_api_ok = False
                 self._rest_fail_until = now_ts + 60
 
+        total_eq = balance.get("total_eq") if balance else None
+        avail_eq = balance.get("avail_eq") if balance else None
+        if total_eq is None or avail_eq is None:
+            rows = self.db.execute(Q.SELECT_STATE, (self.user_id,))
+            row = rows[0] if rows else None
+            if row:
+                total_eq = total_eq if total_eq is not None else row.get("balance_usdt")
+                avail_eq = avail_eq if avail_eq is not None else row.get("available_usdt")
+
         spread = self.sc.spread() if self.sc.has_reference() else None
         long_b, short_b = (self.pm.state.long_basket, self.pm.state.short_basket) if self.pm.state.is_open else (None, None)
         buy_basket = long_b
@@ -374,8 +386,8 @@ class TradingEngine:
             pnl.get("pnl_short_pct"),
             pnl.get("pnl_total_pct"),
             pnl.get("pnl_total_usdt"),
-            balance.get("total_eq"),
-            balance.get("avail_eq"),
+            total_eq,
+            avail_eq,
             ping,
             "connected",
             int(self.pm.state.is_open) if self.pm else 0,

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -52,10 +53,12 @@ class PositionManager:
         okx: OKXClient,
         spread_calc: SpreadCalculator,
         config: dict,
+        log_event_cb: Callable[[str, str, dict | None], None] | None = None,
     ) -> None:
         self.okx = okx
         self.sc = spread_calc
         self.cfg = config
+        self.log_event = log_event_cb
         self.state = PositionState()
         self.entry_cooldown = False
 
@@ -351,22 +354,29 @@ class PositionManager:
         return price
 
     def _execute_entry(self, long_basket: str, short_basket: str) -> None:
+        required = len(self.sc.all_symbols)
         balance = self.okx.get_balance()
         avail = balance["avail_eq"]
         per_pair_usdt = (avail * self.position_size_pct / 100.0) / len(self.sc.pairs)
         log.info(
-            "Entry calc: avail=%.2f, size_pct=%.0f%%, pairs=%d, per_pair=%.2f USDT",
-            avail, self.position_size_pct, len(self.sc.pairs), per_pair_usdt,
+            "Entry calc: avail=%.2f, size_pct=%.0f%%, pairs=%d, per_pair=%.2f USDT, required=%d",
+            avail, self.position_size_pct, len(self.sc.pairs), per_pair_usdt, required,
         )
 
-        # Подтягиваем цены по REST для символов без котировок (WS может не успеть)
-        missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
-        if missing:
+        # Ждём ВСЕ цены — без ограничения попыток, до последнего
+        attempt = 0
+        while True:
+            missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
+            if not missing:
+                break
+            attempt += 1
+            log.info("Price fetch attempt %d: missing %s", attempt, missing)
             fetched = self.okx.fetch_ticker_prices(missing)
             for sym, px in fetched.items():
                 if px > 0:
                     self.sc.current_prices[sym] = px
                     log.info("REST price for %s: %.4f", sym, px)
+            time.sleep(1.5)
 
         orders = []
         long_symbols = self.sc.symbols_b1 if long_basket == "basket1" else self.sc.symbols_b2
@@ -374,13 +384,11 @@ class PositionManager:
 
         for sym in long_symbols:
             price = self._get_price(sym)
-            if price <= 0:
-                log.warning("No price for LONG %s — skipped", sym)
-                continue
             sz = self.okx.usdt_to_contracts(sym, per_pair_usdt, price)
             if sz <= 0:
-                log.warning("Cannot open LONG %s: sz=0 (per_pair=%.2f, price=%.4f)", sym, per_pair_usdt, price)
-                continue
+                lot = self.okx.get_lot_sz(sym)
+                sz = max(1, int(round(lot))) if lot > 0 else 1
+                log.warning("LONG %s: sz was 0, using min %d", sym, sz)
             orders.append({
                 "instId": sym, "tdMode": "cross",
                 "side": "buy", "ordType": "market", "sz": str(sz),
@@ -388,21 +396,18 @@ class PositionManager:
 
         for sym in short_symbols:
             price = self._get_price(sym)
-            if price <= 0:
-                log.warning("No price for SHORT %s — skipped", sym)
-                continue
             sz = self.okx.usdt_to_contracts(sym, per_pair_usdt, price)
             if sz <= 0:
-                log.warning("Cannot open SHORT %s: sz=0 (per_pair=%.2f, price=%.4f)", sym, per_pair_usdt, price)
-                continue
+                lot = self.okx.get_lot_sz(sym)
+                sz = max(1, int(round(lot))) if lot > 0 else 1
+                log.warning("SHORT %s: sz was 0, using min %d", sym, sz)
             orders.append({
                 "instId": sym, "tdMode": "cross",
                 "side": "sell", "ordType": "market", "sz": str(sz),
             })
 
-        if not orders:
-            log.warning("No orders to place (all symbols skipped)")
-            return
+        # Всегда строим required ордеров (sz=0 → min lot)
+        assert len(orders) == required, f"orders {len(orders)} != required {required}"
 
         results = self.okx.place_batch_orders(orders)
         failed = []
@@ -412,20 +417,46 @@ class PositionManager:
                 o = orders[i] if i < len(orders) else {}
                 failed.append((o, r.get("sMsg", ""), s_code))
 
-        if failed:
-            log.warning("Batch entry: %d failed, retrying one-by-one", len(failed))
+        # Ретрай проваленных — БЕЗ ЛИМИТА, до последнего, пока все не разместим
+        retry_round = 0
+        while failed:
+            retry_round += 1
+            delay = min(2.0 + retry_round * 0.5, 15.0)
+            log.warning("Batch entry: %d failed, retry #%d in %.1fs", len(failed), retry_round, delay)
+            time.sleep(delay)
+            still_failed = []
             for order, msg, code in failed:
                 try:
-                    time.sleep(0.5)
                     r = self.okx.place_batch_orders([order])
                     if r and r[0].get("sCode") == "0":
                         log.info("Retry OK: %s", order.get("instId"))
                     else:
-                        log.error("Retry failed %s: sCode=%s %s", order.get("instId"), code, msg)
+                        err_msg = r[0].get("sMsg", msg) if r else msg
+                        err_code = r[0].get("sCode", code) if r else code
+                        still_failed.append((order, err_msg, err_code))
+                        log.error("Retry failed %s: sCode=%s %s", order.get("instId"), err_code, err_msg)
                 except Exception as e:
+                    still_failed.append((order, str(e), "exception"))
                     log.exception("Retry exception for %s: %s", order.get("instId"), e)
+            failed = still_failed
 
-        log.info("Batch entry: %d orders sent, %d failed (retried)", len(results), len(failed))
+        ok_count = len(orders)
+        log.info("Batch entry: %d OK, %d failed (after retries)", ok_count, len(failed))
+
+        if self.log_event:
+            details = {
+                "total": len(orders),
+                "ok": ok_count,
+                "failed": len(failed),
+                "failed_symbols": [o.get("instId") for o, _, _ in failed],
+                "failed_codes": [(o.get("instId"), c, m) for o, m, c in failed],
+            }
+            self.log_event(
+                "trade" if len(failed) == 0 else "warning",
+                f"Batch entry: {ok_count}/{len(orders)} OK" + (f", {len(failed)} failed" if failed else ""),
+                details,
+            )
+
         self._update_positions_from_exchange()
 
     def _execute_close(self) -> None:
