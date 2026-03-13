@@ -363,35 +363,44 @@ class PositionManager:
             avail, self.position_size_pct, len(self.sc.pairs), per_pair_usdt, required,
         )
 
-        # Ждём ВСЕ цены — без ограничения попыток, до последнего
-        attempt = 0
-        while True:
+        # Получаем ВСЕ цены (до 60 попыток = ~90 сек)
+        for attempt in range(60):
             missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
             if not missing:
                 break
-            attempt += 1
-            log.info("Price fetch attempt %d: missing %s", attempt, missing)
+            log.info("Price fetch attempt %d/60: missing %s", attempt + 1, missing)
             fetched = self.okx.fetch_ticker_prices(missing)
             for sym, px in fetched.items():
                 if px > 0:
                     self.sc.current_prices[sym] = px
                     log.info("REST price for %s: %.4f", sym, px)
             time.sleep(1.5)
+        still_missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
+        if still_missing:
+            log.error("Entry ABORT: no prices for %s after 60 attempts", still_missing)
+            if self.log_event:
+                self.log_event("error", f"Entry aborted: no prices for {still_missing}", {"missing": still_missing})
+            return
 
         orders = []
         long_symbols = self.sc.symbols_b1 if long_basket == "basket1" else self.sc.symbols_b2
         short_symbols = self.sc.symbols_b2 if long_basket == "basket1" else self.sc.symbols_b1
+
+        def _format_sz(val: int | float) -> str:
+            if val >= 1:
+                return str(int(val))
+            return f"{val:.10g}".rstrip("0").rstrip(".")
 
         for sym in long_symbols:
             price = self._get_price(sym)
             sz = self.okx.usdt_to_contracts(sym, per_pair_usdt, price)
             if sz <= 0:
                 lot = self.okx.get_lot_sz(sym)
-                sz = max(1, int(round(lot))) if lot > 0 else 1
-                log.warning("LONG %s: sz was 0, using min %d", sym, sz)
+                sz = max(lot, 1.0) if lot > 0 else 1
+                log.warning("LONG %s: sz was 0, using min %s", sym, sz)
             orders.append({
                 "instId": sym, "tdMode": "cross",
-                "side": "buy", "ordType": "market", "sz": str(sz),
+                "side": "buy", "ordType": "market", "sz": _format_sz(sz),
             })
 
         for sym in short_symbols:
@@ -399,40 +408,49 @@ class PositionManager:
             sz = self.okx.usdt_to_contracts(sym, per_pair_usdt, price)
             if sz <= 0:
                 lot = self.okx.get_lot_sz(sym)
-                sz = max(1, int(round(lot))) if lot > 0 else 1
-                log.warning("SHORT %s: sz was 0, using min %d", sym, sz)
+                sz = max(lot, 1.0) if lot > 0 else 1
+                log.warning("SHORT %s: sz was 0, using min %s", sym, sz)
             orders.append({
                 "instId": sym, "tdMode": "cross",
-                "side": "sell", "ordType": "market", "sz": str(sz),
+                "side": "sell", "ordType": "market", "sz": _format_sz(sz),
             })
 
-        # Всегда строим required ордеров (sz=0 → min lot)
-        assert len(orders) == required, f"orders {len(orders)} != required {required}"
+        if len(orders) != required:
+            log.error("Entry ABORT: built %d orders, required %d", len(orders), required)
+            if self.log_event:
+                self.log_event("error", f"Entry aborted: {len(orders)}/{required} orders", {"built": len(orders), "required": required})
+            return
 
         results = self.okx.place_batch_orders(orders)
         failed = []
-        for i, r in enumerate(results):
+        for i in range(len(orders)):
+            o = orders[i]
+            if i >= len(results):
+                failed.append((o, "OKX returned fewer results than orders", "no_result"))
+                log.error("Order %s: no result from OKX (got %d results for %d orders)", o.get("instId"), len(results), len(orders))
+                continue
+            r = results[i]
             s_code = r.get("sCode", "0")
             if s_code != "0":
-                o = orders[i] if i < len(orders) else {}
                 failed.append((o, r.get("sMsg", ""), s_code))
 
-        # Ретрай проваленных — БЕЗ ЛИМИТА, до последнего, пока все не разместим
-        retry_round = 0
-        while failed:
-            retry_round += 1
+        # Ретрай проваленных — до 30 попыток (rate limit OKX)
+        max_retries = 30
+        for retry_round in range(max_retries):
+            if not failed:
+                break
             delay = min(2.0 + retry_round * 0.5, 15.0)
-            log.warning("Batch entry: %d failed, retry #%d in %.1fs", len(failed), retry_round, delay)
+            log.warning("Batch entry: %d failed, retry %d/%d in %.1fs", len(failed), retry_round + 1, max_retries, delay)
             time.sleep(delay)
             still_failed = []
             for order, msg, code in failed:
                 try:
                     r = self.okx.place_batch_orders([order])
-                    if r and r[0].get("sCode") == "0":
+                    if r and len(r) > 0 and r[0].get("sCode") == "0":
                         log.info("Retry OK: %s", order.get("instId"))
                     else:
-                        err_msg = r[0].get("sMsg", msg) if r else msg
-                        err_code = r[0].get("sCode", code) if r else code
+                        err_msg = r[0].get("sMsg", msg) if r and len(r) > 0 else msg
+                        err_code = r[0].get("sCode", code) if r and len(r) > 0 else code
                         still_failed.append((order, err_msg, err_code))
                         log.error("Retry failed %s: sCode=%s %s", order.get("instId"), err_code, err_msg)
                 except Exception as e:
@@ -440,7 +458,7 @@ class PositionManager:
                     log.exception("Retry exception for %s: %s", order.get("instId"), e)
             failed = still_failed
 
-        ok_count = len(orders)
+        ok_count = len(orders) - len(failed)
         log.info("Batch entry: %d OK, %d failed (after retries)", ok_count, len(failed))
 
         if self.log_event:
