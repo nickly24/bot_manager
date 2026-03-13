@@ -141,8 +141,19 @@ class PositionManager:
             return None
 
         pnl = self._unrealised_pnl()
+        tp = self.take_profit_pct
 
-        if pnl >= self.take_profit_pct:
+        # #region agent log
+        if pnl >= tp:
+            try:
+                import json
+                with open("/Users/nickly/Desktop/robot/.cursor/debug-7b318a.log", "a") as f:
+                    f.write(json.dumps({"sessionId":"7b318a","hypothesisId":"B","location":"position.py:evaluate","message":"tp_fires","data":{"pnl":pnl,"take_profit_pct":tp,"entry_spread":self.state.entry_spread,"spread":spread,"long_basket":self.state.long_basket},"timestamp":int(__import__("time").time()*1000)}) + "\n")
+            except Exception:
+                pass
+        # #endregion
+
+        if pnl >= tp:
             return self._close_position("take_profit", pnl, spread)
 
         if self.stop_loss_enabled and pnl <= -self.stop_loss_pct:
@@ -280,6 +291,15 @@ class PositionManager:
             avail, self.position_size_pct, len(self.sc.pairs), per_pair_usdt,
         )
 
+        # Подтягиваем цены по REST для символов без котировок (WS может не успеть)
+        missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
+        if missing:
+            fetched = self.okx.fetch_ticker_prices(missing)
+            for sym, px in fetched.items():
+                if px > 0:
+                    self.sc.current_prices[sym] = px
+                    log.info("REST price for %s: %.4f", sym, px)
+
         orders = []
         long_symbols = self.sc.symbols_b1 if long_basket == "basket1" else self.sc.symbols_b2
         short_symbols = self.sc.symbols_b2 if long_basket == "basket1" else self.sc.symbols_b1
@@ -312,10 +332,33 @@ class PositionManager:
                 "side": "sell", "ordType": "market", "sz": str(sz),
             })
 
-        if orders:
-            results = self.okx.place_batch_orders(orders)
-            log.info("Batch entry: %d orders placed", len(results))
-            self._update_positions_from_exchange()
+        if not orders:
+            log.warning("No orders to place (all symbols skipped)")
+            return
+
+        results = self.okx.place_batch_orders(orders)
+        failed = []
+        for i, r in enumerate(results):
+            s_code = r.get("sCode", "0")
+            if s_code != "0":
+                o = orders[i] if i < len(orders) else {}
+                failed.append((o, r.get("sMsg", ""), s_code))
+
+        if failed:
+            log.warning("Batch entry: %d failed, retrying one-by-one", len(failed))
+            for order, msg, code in failed:
+                try:
+                    time.sleep(0.5)
+                    r = self.okx.place_batch_orders([order])
+                    if r and r[0].get("sCode") == "0":
+                        log.info("Retry OK: %s", order.get("instId"))
+                    else:
+                        log.error("Retry failed %s: sCode=%s %s", order.get("instId"), code, msg)
+                except Exception as e:
+                    log.exception("Retry exception for %s: %s", order.get("instId"), e)
+
+        log.info("Batch entry: %d orders sent, %d failed (retried)", len(results), len(failed))
+        self._update_positions_from_exchange()
 
     def _execute_close(self) -> None:
         positions = self.okx.get_positions()

@@ -83,6 +83,21 @@ class TradingEngine:
                 log.warning("Failed to set leverage for %s", sym, exc_info=True)
 
         self._restore_state()
+        log.info(
+            "Config: entry=%.2f%%, TP=%.2f%%, SL=%.2f%% (enabled=%s)",
+            self._config.get("entry_spread_pct", 0),
+            self._config.get("take_profit_pct", 0),
+            self._config.get("stop_loss_pct", 0),
+            self._config.get("stop_loss_enabled", False),
+        )
+        # #region agent log
+        try:
+            import json
+            with open("/Users/nickly/Desktop/robot/.cursor/debug-7b318a.log", "a") as f:
+                f.write(json.dumps({"sessionId":"7b318a","hypothesisId":"A","location":"engine.py:init","message":"config_loaded","data":{"cfg_keys":list(self._config.keys())[:20],"take_profit_pct":self._config.get("take_profit_pct"),"entry_spread_pct":self._config.get("entry_spread_pct"),"stop_loss_pct":self._config.get("stop_loss_pct"),"raw_tp":repr(self._config.get("take_profit_pct"))},"timestamp":int(__import__("time").time()*1000)}) + "\n")
+        except Exception:
+            pass
+        # #endregion
         self._log_event("info", "Бот инициализирован")
 
     def _load_config(self) -> dict:
@@ -405,16 +420,29 @@ class TradingEngine:
         closed_at = datetime.utcnow()
         duration = int((closed_at - opened_at).total_seconds())
 
+        entry_spread = float(snapshot.get("entry_spread", 0))
+        long_b = snapshot.get("long_basket") or "basket1"
+        actual_pnl = (exit_spread - entry_spread) if long_b == "basket1" else (entry_spread - exit_spread)
+
+        # #region agent log
+        try:
+            import json
+            with open("/Users/nickly/Desktop/robot/.cursor/debug-7b318a.log", "a") as f:
+                f.write(json.dumps({"sessionId":"7b318a","hypothesisId":"C","location":"engine.py:_record_trade","message":"trade_record","data":{"entry_spread":entry_spread,"exit_spread":exit_spread,"long_basket":long_b,"actual_pnl":actual_pnl,"reason":reason},"timestamp":int(__import__("time").time()*1000)}) + "\n")
+        except Exception:
+            pass
+        # #endregion
+
         self.db.execute(Q.INSERT_TRADE, (
             self.user_id,
             opened_at,
             closed_at,
             duration,
-            round(float(snapshot.get("entry_spread", 0)), 4),
+            round(entry_spread, 4),
             round(exit_spread, 4),
-            snapshot.get("long_basket") or "basket1",
+            long_b,
             snapshot.get("short_basket") or "basket2",
-            pnl.get("pnl_total_pct", 0),
+            round(actual_pnl, 4),
             0,
             0,
             snapshot.get("dca_count", 0),
