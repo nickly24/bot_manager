@@ -20,6 +20,19 @@ from okx.websocket.WsPublicAsync import WsPublicAsync
 log = logging.getLogger("okx_client")
 
 
+def _fill_in_range(f: dict, begin_ms: int | None, end_ms: int | None) -> bool:
+    ts = f.get("fillTime") or f.get("ts") or "0"
+    try:
+        t = int(ts)
+    except (TypeError, ValueError):
+        return True
+    if begin_ms is not None and t < begin_ms:
+        return False
+    if end_ms is not None and t > end_ms:
+        return False
+    return True
+
+
 class OKXClient:
     """Synchronous REST helpers + async WebSocket subscription."""
 
@@ -177,6 +190,60 @@ class OKXClient:
     # ------------------------------------------------------------------
     # REST ticker (bootstrap when WS is slow for low-volume pairs)
     # ------------------------------------------------------------------
+
+    def get_fills_history(
+        self,
+        inst_type: str = "SWAP",
+        begin_ms: int | None = None,
+        end_ms: int | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Fetch historical fills. Returns list of fill objects with fillPnl etc."""
+        kwargs: dict = {"instType": inst_type, "limit": str(limit)}
+        if begin_ms is not None:
+            kwargs["begin"] = str(begin_ms)
+        if end_ms is not None:
+            kwargs["end"] = str(end_ms)
+        try:
+            r = self._safe_request(self.trade.get_fills_history, **kwargs)
+        except TypeError:
+            kwargs.pop("begin", None)
+            kwargs.pop("end", None)
+            r = self._safe_request(self.trade.get_fills_history, **kwargs)
+        data = r.get("data", [])
+        if (begin_ms is not None or end_ms is not None) and data:
+            data = [f for f in data if _fill_in_range(f, begin_ms, end_ms)]
+        return data
+
+    def get_recent_close_pnl(self, our_symbols: set[str], window_sec: int = 180) -> float | None:
+        """
+        Fetch recent SWAP fills, sum fillPnl for close orders (subType 5,6) in our_symbols.
+        Returns total realized PnL in USDT or None on failure.
+        """
+        try:
+            fills = self.get_fills_history(inst_type="SWAP", limit=100)
+        except Exception as e:
+            log.warning("get_recent_close_pnl: failed to fetch fills: %s", e)
+            return None
+        cutoff_ms = int(time.time() * 1000) - window_sec * 1000
+        total = 0.0
+        for f in fills:
+            if f.get("instId") not in our_symbols:
+                continue
+            if str(f.get("subType", "")) not in ("5", "6"):
+                continue
+            ts = f.get("fillTime") or f.get("ts") or "0"
+            try:
+                if int(ts) < cutoff_ms:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            pnl_str = f.get("fillPnl") or f.get("pnl") or "0"
+            try:
+                total += float(pnl_str)
+            except (TypeError, ValueError):
+                pass
+        return round(total, 2)
 
     def fetch_ticker_prices(self, symbols: list[str]) -> dict[str, float]:
         """Fetch current prices via REST for given symbols."""

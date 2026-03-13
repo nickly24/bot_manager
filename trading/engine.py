@@ -427,26 +427,43 @@ class TradingEngine:
 
         entry_spread = float(snapshot.get("entry_spread", 0))
         long_b = snapshot.get("long_basket") or "basket1"
-        actual_pnl = (exit_spread - entry_spread) if long_b == "basket1" else (entry_spread - exit_spread)
 
         pnl_usdt_val = 0.0
-        try:
-            balance = self.okx.get_balance()
-            total_eq = float(balance.get("total_eq") or 0)
-            size_pct = float(self._config.get("position_size_pct", 100))
-            exposure = total_eq * (size_pct / 100.0)
-            pnl_usdt_val = round(exposure * (actual_pnl / 100.0), 2)
-        except Exception:
-            pass
+        actual_pnl_pct = 0.0
 
-        # #region agent log
-        try:
-            import json
-            with open("/Users/nickly/Desktop/robot/.cursor/debug-7b318a.log", "a") as f:
-                f.write(json.dumps({"sessionId":"7b318a","hypothesisId":"C","location":"engine.py:_record_trade","message":"trade_record","data":{"entry_spread":entry_spread,"exit_spread":exit_spread,"long_basket":long_b,"actual_pnl":actual_pnl,"reason":reason},"timestamp":int(__import__("time").time()*1000)}) + "\n")
-        except Exception:
-            pass
-        # #endregion
+        time.sleep(2)
+        real_pnl = self.okx.get_recent_close_pnl(
+            set(self.sc.all_symbols),
+            window_sec=180,
+        )
+        if real_pnl is not None:
+            pnl_usdt_val = real_pnl
+            try:
+                balance = self.okx.get_balance()
+                total_eq = float(balance.get("total_eq") or 0)
+                size_pct = float(self._config.get("position_size_pct", 100))
+                exposure = total_eq * (size_pct / 100.0)
+                if exposure > 0:
+                    actual_pnl_pct = round((pnl_usdt_val / exposure) * 100, 4)
+            except Exception:
+                actual_pnl_pct = 0.0
+            log.info("Trade PnL from OKX fills: %.2f USDT (%.4f%%)", pnl_usdt_val, actual_pnl_pct)
+        else:
+            spread_pnl = (exit_spread - entry_spread) if long_b == "basket1" else (entry_spread - exit_spread)
+            actual_pnl_pct = spread_pnl
+            log.warning(
+                "Could not fetch real PnL from OKX — using spread-based (%.4f%%). "
+                "DB record may be inaccurate.",
+                spread_pnl,
+            )
+            try:
+                balance = self.okx.get_balance()
+                total_eq = float(balance.get("total_eq") or 0)
+                size_pct = float(self._config.get("position_size_pct", 100))
+                exposure = total_eq * (size_pct / 100.0)
+                pnl_usdt_val = round(exposure * (spread_pnl / 100.0), 2)
+            except Exception:
+                pass
 
         self.db.execute(Q.INSERT_TRADE, (
             self.user_id,
@@ -457,7 +474,7 @@ class TradingEngine:
             round(exit_spread, 4),
             long_b,
             snapshot.get("short_basket") or "basket2",
-            round(actual_pnl, 4),
+            round(actual_pnl_pct, 4),
             pnl_usdt_val,
             0,
             snapshot.get("dca_count", 0),
