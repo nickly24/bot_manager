@@ -152,7 +152,16 @@ class BotManager:
         info = w.to_dict()
         rows = self.db.execute(Q.SELECT_STATE, (user_id,))
         if rows:
-            info["db_state"] = rows[0]
+            db_row = rows[0]
+            # Не отдавать db_state от предыдущего воркера (replication lag / окно после рестарта)
+            if db_row.get("worker_pid") == w.pid:
+                info["db_state"] = db_row
+            else:
+                log.debug(
+                    "Skipping stale db_state: worker_pid=%s != current pid=%s",
+                    db_row.get("worker_pid"), w.pid,
+                )
+                info["db_state"] = None
         return info
 
     def list_workers(self) -> list[dict]:
