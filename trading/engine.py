@@ -439,6 +439,30 @@ class TradingEngine:
         snap = snapshot if snapshot is not None else self.pm.state.to_dict()
         self._record_trade_from_snapshot(reason, exit_spread, pnl, snap)
 
+    def _pnl_from_snapshot(self, snapshot: dict) -> tuple[float, float, float] | None:
+        """Из positions в snapshot считаем pnl_usdt, pnl_pct, total_volume_usdt. Или None если нет данных."""
+        positions = snapshot.get("positions") or {}
+        if not positions:
+            return None
+        total_upl = 0.0
+        exposure = 0.0
+        for inst_id, pos in positions.items():
+            try:
+                upl = float(pos.get("upl", 0))
+                qty = float(pos.get("qty", 0))
+                avg_px = float(pos.get("avg_price", 0))
+                total_upl += upl
+                ct_val = self.okx.get_ct_val(inst_id)
+                exposure += qty * ct_val * avg_px
+            except (ValueError, KeyError, TypeError):
+                continue
+        if exposure <= 0:
+            return None
+        pnl_usdt = round(total_upl, 2)
+        pnl_pct = round(100.0 * total_upl / exposure, 4)
+        total_volume = round(exposure, 2)
+        return (pnl_usdt, pnl_pct, total_volume)
+
     def _record_trade_from_snapshot(
         self, reason: str, exit_spread: float, pnl: dict, snapshot: dict
     ) -> None:
@@ -454,40 +478,53 @@ class TradingEngine:
 
         pnl_usdt_val = 0.0
         actual_pnl_pct = 0.0
+        total_volume_usdt = 0.0
 
-        time.sleep(2)
-        real_pnl = self.okx.get_recent_close_pnl(
-            set(self.sc.all_symbols),
-            window_sec=180,
-        )
-        if real_pnl is not None:
-            pnl_usdt_val = real_pnl
-            try:
-                balance = self.okx.get_balance()
-                total_eq = float(balance.get("total_eq") or 0)
-                size_pct = float(self._config.get("position_size_pct", 100))
-                exposure = total_eq * (size_pct / 100.0)
-                if exposure > 0:
-                    actual_pnl_pct = round((pnl_usdt_val / exposure) * 100, 4)
-            except Exception:
-                actual_pnl_pct = 0.0
-            log.info("Trade PnL from OKX fills: %.2f USDT (%.4f%%)", pnl_usdt_val, actual_pnl_pct)
+        # 1. Приоритет: данные из snapshot (positions до закрытия) — без доп. запросов к OKX
+        from_snapshot = self._pnl_from_snapshot(snapshot)
+        if from_snapshot is not None:
+            pnl_usdt_val, actual_pnl_pct, total_volume_usdt = from_snapshot
+            log.info("Trade PnL from snapshot: %.2f USDT (%.4f%%), volume=%.2f", pnl_usdt_val, actual_pnl_pct, total_volume_usdt)
         else:
-            spread_pnl = (exit_spread - entry_spread) if long_b == "basket1" else (entry_spread - exit_spread)
-            actual_pnl_pct = spread_pnl
-            log.warning(
-                "Could not fetch real PnL from OKX — using spread-based (%.4f%%). "
-                "DB record may be inaccurate.",
-                spread_pnl,
+            # 2. Fallback: OKX fills, затем spread-based
+            time.sleep(2)
+            real_pnl = self.okx.get_recent_close_pnl(
+                set(self.sc.all_symbols),
+                window_sec=180,
             )
-            try:
-                balance = self.okx.get_balance()
-                total_eq = float(balance.get("total_eq") or 0)
-                size_pct = float(self._config.get("position_size_pct", 100))
-                exposure = total_eq * (size_pct / 100.0)
-                pnl_usdt_val = round(exposure * (spread_pnl / 100.0), 2)
-            except Exception:
-                pass
+            if real_pnl is not None:
+                pnl_usdt_val = real_pnl
+                try:
+                    balance = self.okx.get_balance()
+                    total_eq = float(balance.get("total_eq") or 0)
+                    size_pct = float(self._config.get("position_size_pct", 100))
+                    exposure = total_eq * (size_pct / 100.0)
+                    if exposure > 0:
+                        actual_pnl_pct = round((pnl_usdt_val / exposure) * 100, 4)
+                        total_volume_usdt = round(exposure, 2)
+                except Exception:
+                    actual_pnl_pct = 0.0
+                log.info("Trade PnL from OKX fills: %.2f USDT (%.4f%%)", pnl_usdt_val, actual_pnl_pct)
+            else:
+                spread_pnl = (exit_spread - entry_spread) if long_b == "basket1" else (entry_spread - exit_spread)
+                actual_pnl_pct = spread_pnl
+                pnl_from_dict = pnl.get("pnl_total_pct")
+                if pnl_from_dict is not None:
+                    actual_pnl_pct = float(pnl_from_dict)
+                log.warning(
+                    "No snapshot positions — using spread-based PnL (%.4f%%)",
+                    actual_pnl_pct,
+                )
+                try:
+                    balance = self.okx.get_balance()
+                    total_eq = float(balance.get("total_eq") or 0)
+                    size_pct = float(self._config.get("position_size_pct", 100))
+                    exposure = total_eq * (size_pct / 100.0)
+                    if exposure > 0:
+                        pnl_usdt_val = round(exposure * (actual_pnl_pct / 100.0), 2)
+                        total_volume_usdt = round(exposure, 2)
+                except Exception:
+                    pass
 
         self.db.execute(Q.INSERT_TRADE, (
             self.user_id,
@@ -500,7 +537,7 @@ class TradingEngine:
             snapshot.get("short_basket") or "basket2",
             round(actual_pnl_pct, 4),
             pnl_usdt_val,
-            0,
+            total_volume_usdt,
             snapshot.get("dca_count", 0),
             reason,
             json.dumps(snapshot.get("positions", {})),
