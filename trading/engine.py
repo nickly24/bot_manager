@@ -63,7 +63,7 @@ class TradingEngine:
             api_key=api_key,
             secret_key=secret,
             passphrase=passphrase,
-            demo=False,
+            demo=(Config.OKX_DEMO == "1"),
         )
         instruments = self.okx.load_instruments()
         self._log_event(

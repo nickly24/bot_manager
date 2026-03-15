@@ -36,5 +36,5 @@ class Config:
     MAX_RESTARTS_PER_WINDOW = int(os.getenv("MAX_RESTARTS_PER_WINDOW", "3"))
     RESTART_WINDOW_SECONDS = int(os.getenv("RESTART_WINDOW_SECONDS", "300"))
 
-    # --- OKX: всегда боевая торговля (live), не демо ---
-    OKX_DEMO = "0"
+    # --- OKX: "1" = demo/testnet, "0" = production ---
+    OKX_DEMO = os.getenv("OKX_DEMO", "1")
