@@ -358,10 +358,12 @@ class PositionManager:
         required = len(self.sc.all_symbols)
         balance = self.okx.get_balance()
         avail = balance["avail_eq"]
+        # Бюджет на одну пару (2 инструмента: long + short). На каждый ордер — половина пары.
         per_pair_usdt = (avail * self.position_size_pct / 100.0) / len(self.sc.pairs)
+        per_instrument_usdt = per_pair_usdt / 2.0
         log.info(
-            "Entry calc: avail=%.2f, size_pct=%.0f%%, pairs=%d, per_pair=%.2f USDT, required=%d",
-            avail, self.position_size_pct, len(self.sc.pairs), per_pair_usdt, required,
+            "Entry calc: avail=%.2f, size_pct=%.0f%%, pairs=%d, per_instrument=%.2f USDT, required=%d",
+            avail, self.position_size_pct, len(self.sc.pairs), per_instrument_usdt, required,
         )
 
         missing = [s for s in self.sc.all_symbols if self.sc.current_prices.get(s, 0) <= 0]
@@ -388,7 +390,7 @@ class PositionManager:
 
         for sym in long_symbols:
             price = self._get_price(sym)
-            sz = self.okx.usdt_to_contracts(sym, per_pair_usdt, price)
+            sz = self.okx.usdt_to_contracts(sym, per_instrument_usdt, price)
             if sz <= 0:
                 lot = self.okx.get_lot_sz(sym)
                 sz = max(lot, 1.0) if lot > 0 else 1
@@ -400,7 +402,7 @@ class PositionManager:
 
         for sym in short_symbols:
             price = self._get_price(sym)
-            sz = self.okx.usdt_to_contracts(sym, per_pair_usdt, price)
+            sz = self.okx.usdt_to_contracts(sym, per_instrument_usdt, price)
             if sz <= 0:
                 lot = self.okx.get_lot_sz(sym)
                 sz = max(lot, 1.0) if lot > 0 else 1
