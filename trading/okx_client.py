@@ -98,17 +98,30 @@ class OKXClient:
         r = self.account.get_account_balance()
         if r.get("code") != "0":
             raise RuntimeError(f"get_balance failed: {r}")
-        details = r["data"][0].get("details", [])
-        usdt = next((d for d in details if d["ccy"] == "USDT"), {})
+        data = r.get("data") or []
+        if not data:
+            log.warning("get_balance: API returned empty data")
+            return {"total_eq": 0.0, "avail_eq": 0.0, "frozen": 0.0, "upl": 0.0}
+        acc = data[0]
 
         def _f(val) -> float:
             if val is None or val == "":
                 return 0.0
-            return float(val)
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return 0.0
 
+        total_eq = _f(acc.get("totalEq"))
+        details = acc.get("details") or []
+        usdt = next((d for d in details if d.get("ccy") == "USDT"), {})
+        avail_eq = _f(usdt.get("availEq") or usdt.get("eq"))
+        if total_eq > 0 and avail_eq == 0 and not usdt:
+            avail_eq = total_eq
+            log.debug("get_balance: no USDT in details, using totalEq for avail_eq")
         return {
-            "total_eq": _f(r["data"][0].get("totalEq")),
-            "avail_eq": _f(usdt.get("availEq")),
+            "total_eq": total_eq,
+            "avail_eq": avail_eq,
             "frozen": _f(usdt.get("frozenBal")),
             "upl": _f(usdt.get("upl")),
         }
