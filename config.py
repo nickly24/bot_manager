@@ -39,5 +39,5 @@ class Config:
     # --- OKX: "1" = demo/testnet, "0" = production ---
     # Режим намеренно выбирается кодовой константой, чтобы не менять .env.
     # Переключай только USE_OKX_DEMO.
-    USE_OKX_DEMO = True
+    USE_OKX_DEMO = False
     OKX_DEMO = "1" if USE_OKX_DEMO else "0"
