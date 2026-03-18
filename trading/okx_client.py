@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from typing import Callable
 
@@ -136,20 +137,105 @@ class OKXClient:
     # Orders
     # ------------------------------------------------------------------
 
-    def usdt_to_contracts(self, inst_id: str, usdt_amount: float, price: float) -> int:
-        ct_val = self.get_ct_val(inst_id)
-        base = usdt_amount / price
-        contracts = int(base / ct_val)
-        lot = int(self.get_lot_sz(inst_id))
-        if lot > 1:
-            contracts = (contracts // lot) * lot
-        return max(contracts, 0)
+    def usdt_to_contracts(self, inst_id: str, usdt_amount: float, price: float) -> float:
+        """
+        Convert target notional in USDT to OKX contract size (sz).
+
+        Uses cached instrument specs loaded by load_instruments() and supports
+        fractional sizes with stepSz/lotSz, as well as ctMult/minSz/maxSz.
+        Returns 0.0 if sizing is invalid (too small, missing specs, etc.).
+        """
+        if usdt_amount <= 0 or price <= 0:
+            return 0.0
+
+        inst = self._instruments_cache.get(inst_id)
+        if not inst:
+            raise ValueError(f"Instrument {inst_id} not in cache")
+
+        def _f(v, default: float) -> float:
+            if v is None or v == "":
+                return default
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return default
+
+        ct_val = _f(inst.get("ctVal"), 0.0)
+        ct_mult = _f(inst.get("ctMult"), 1.0)
+        step_sz = _f(inst.get("stepSz"), _f(inst.get("lotSz"), 1.0))
+        lot_sz = _f(inst.get("lotSz"), step_sz if step_sz > 0 else 1.0)
+        min_sz = _f(inst.get("minSz"), step_sz if step_sz > 0 else 0.0)
+        max_sz_raw = _f(inst.get("maxSz"), 0.0)
+        max_sz = max_sz_raw if max_sz_raw > 0 else float("inf")
+
+        if ct_val <= 0 or ct_mult <= 0 or step_sz <= 0 or lot_sz <= 0:
+            return 0.0
+
+        cost_per_contract = ct_val * ct_mult * price
+        if cost_per_contract <= 0:
+            return 0.0
+
+        raw_sz = usdt_amount / cost_per_contract
+
+        def _round_down(x: float, step: float) -> float:
+            return math.floor(x / step) * step
+
+        def _round_up(x: float, step: float) -> float:
+            return math.ceil(x / step) * step
+
+        down_sz = _round_down(raw_sz, step_sz)
+        down_usdt = down_sz * cost_per_contract
+        up_sz = _round_up(raw_sz, step_sz)
+        up_usdt = up_sz * cost_per_contract
+
+        chosen_sz = down_sz
+        chosen_usdt = down_usdt
+        if down_usdt < usdt_amount * 0.95:
+            if abs(up_usdt - usdt_amount) < abs(down_usdt - usdt_amount):
+                chosen_sz = up_sz
+                chosen_usdt = up_usdt
+
+        if chosen_sz <= 0:
+            return 0.0
+        if min_sz > 0 and chosen_sz < min_sz:
+            return 0.0
+        if chosen_sz > max_sz:
+            return 0.0
+
+        # Ensure step multiple (floating-safe)
+        if abs((chosen_sz / step_sz) - round(chosen_sz / step_sz)) > 1e-8:
+            return 0.0
+
+        # Normalize to lotSz (round up to lot multiple)
+        lots = math.ceil(chosen_sz / lot_sz)
+        chosen_sz = lots * lot_sz
+        chosen_usdt = chosen_sz * cost_per_contract
+
+        if chosen_sz <= 0 or chosen_sz > max_sz:
+            return 0.0
+
+        log.debug(
+            "usdt_to_contracts instId=%s target=%.4f raw=%.8f chosen=%.8f actual=%.4f ctVal=%s ctMult=%s stepSz=%s lotSz=%s minSz=%s maxSz=%s",
+            inst_id,
+            usdt_amount,
+            raw_sz,
+            chosen_sz,
+            chosen_usdt,
+            inst.get("ctVal"),
+            inst.get("ctMult"),
+            inst.get("stepSz"),
+            inst.get("lotSz"),
+            inst.get("minSz"),
+            inst.get("maxSz"),
+        )
+
+        return chosen_sz
 
     def place_market_order(
         self,
         inst_id: str,
         side: str,
-        sz: int,
+        sz: int | float,
         reduce_only: bool = False,
     ) -> dict:
         params = dict(
