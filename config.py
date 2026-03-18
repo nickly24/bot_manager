@@ -37,4 +37,7 @@ class Config:
     RESTART_WINDOW_SECONDS = int(os.getenv("RESTART_WINDOW_SECONDS", "300"))
 
     # --- OKX: "1" = demo/testnet, "0" = production ---
-    OKX_DEMO = os.getenv("OKX_DEMO", "0")
+    # Режим намеренно выбирается кодовой константой, чтобы не менять .env.
+    # Переключай только USE_OKX_DEMO.
+    USE_OKX_DEMO = True
+    OKX_DEMO = "1" if USE_OKX_DEMO else "0"

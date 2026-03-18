@@ -354,6 +354,17 @@ class PositionManager:
             price = self.sc.reference_prices.get(sym, 0)
         return price
 
+    def _format_sz_contract(self, val: float) -> str:
+        """
+        Форматирование размера `sz` для OKX без scientific notation.
+        Важно: при дробных контрактах нельзя резать int(), иначе OKX вернёт
+        `Parameter sz error` (51000).
+        """
+        if val == 0:
+            return "0"
+        s = f"{abs(val):.16f}".rstrip("0").rstrip(".")
+        return s if s else "0"
+
     def _execute_entry(self, long_basket: str, short_basket: str) -> None:
         required = len(self.sc.all_symbols)
         balance = self.okx.get_balance()
@@ -499,6 +510,7 @@ class PositionManager:
         positions = self.okx.get_positions()
         our_symbols = set(self.sc.all_symbols)
         orders = []
+        EPS = 1e-10  # считаем позицию закрытой, если остаток меньше этого порога
         for pos in positions:
             if pos["instId"] not in our_symbols:
                 continue
@@ -509,7 +521,8 @@ class PositionManager:
             orders.append({
                 "instId": pos["instId"], "tdMode": "cross",
                 "side": side, "ordType": "market",
-                "sz": str(abs(int(float(pos["pos"])))),
+                # use exact exchange qty to avoid 51000 Parameter sz error
+                "sz": self._format_sz_contract(qty),
                 "reduceOnly": True,
             })
 
@@ -544,15 +557,19 @@ class PositionManager:
 
         time.sleep(2)
         remaining = self.okx.get_positions()
-        still_open = [p for p in remaining if p["instId"] in our_symbols and float(p.get("pos", 0)) != 0]
+        still_open = [
+            p
+            for p in remaining
+            if p["instId"] in our_symbols and abs(float(p.get("pos", 0))) > EPS
+        ]
         if still_open:
             syms = [p["instId"] for p in still_open]
             log.warning("Positions still open after close attempt: %s — retrying one-by-one", syms)
             for pos in still_open:
                 qty = float(pos["pos"])
-                sz = max(1, abs(int(round(qty))))
+                sz = self._format_sz_contract(qty)
                 side = "sell" if qty > 0 else "buy"
-                ro = {"instId": pos["instId"], "tdMode": "cross", "side": side, "ordType": "market", "sz": str(sz), "reduceOnly": True}
+                ro = {"instId": pos["instId"], "tdMode": "cross", "side": side, "ordType": "market", "sz": sz, "reduceOnly": True}
                 try:
                     time.sleep(0.6)
                     rr = self.okx.place_batch_orders([ro])
@@ -562,9 +579,13 @@ class PositionManager:
                         log.error("Retry close failed %s: %s", pos["instId"], rr[0].get("sMsg", "") if rr else "no response")
                 except Exception as e:
                     log.exception("Retry close exception %s: %s", pos["instId"], e)
-            time.sleep(2)
+            time.sleep(3)  # дать время на догон заполнений
             final = self.okx.get_positions()
-            still_open_final = [p for p in final if p["instId"] in our_symbols and float(p.get("pos", 0)) != 0]
+            still_open_final = [
+                p
+                for p in final
+                if p["instId"] in our_symbols and abs(float(p.get("pos", 0))) > EPS
+            ]
             if still_open_final:
                 syms_final = [p["instId"] for p in still_open_final]
                 raise RuntimeError(f"Failed to close positions after retry: {syms_final}")
